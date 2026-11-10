@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The sandbox binary pinned by near-workspaces 3.x is no longer hosted.
+      SANDBOX_ARTIFACT_URL: https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/1.35.0/near-sandbox.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.67.1
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.67.1
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build contract
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Use the fresh build in tests
+        run: cp target/wasm32-unknown-unknown/release/near_bridge_assist.wasm res/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: integration-tests/yarn.lock
+
+      - name: Install test dependencies
+        working-directory: integration-tests
+        run: yarn install --frozen-lockfile
+
+      - name: Integration tests
+        working-directory: integration-tests
+        run: npx ava --concurrency 4
